@@ -161,7 +161,7 @@ if __name__ == "__main__":
         product_image_path="./images/dress.png",
         output_dir="./results",
         # APIパラメータ
-        sample_count=1,              
+        sample_count=4,              
         base_steps=32,               
         add_watermark=False,         
         seed=42,                    
