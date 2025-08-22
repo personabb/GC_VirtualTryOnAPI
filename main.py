@@ -11,7 +11,7 @@ from dotenv import load_dotenv, find_dotenv
 
 from google.oauth2 import service_account
 import google.auth
-from google.auth.transport.requests import Request
+from google.auth.transport.requests import Request, AuthorizedSession
 
 _ = load_dotenv(find_dotenv())
 
@@ -27,7 +27,10 @@ class VirtualTryOnAPI:
             location: リージョン（デフォルト: us-central1）
             service_account_path: サービスアカウントJSONファイルのパス（オプション）
         """
-        self.credentials, self.project_id = google.auth.default()
+        SCOPES = ["https://www.googleapis.com/auth/cloud-platform"]
+        self.credentials, self.project_id = google.auth.default(scopes=SCOPES)
+        print(f"使用中のプロジェクトID: {self.project_id}")
+
         self.location = location
         self.model_id = "virtual-try-on-preview-08-04"
         self.endpoint = f"https://{location}-aiplatform.googleapis.com/v1/projects/{self.project_id}/locations/{location}/publishers/google/models/{self.model_id}:predict"
@@ -46,7 +49,6 @@ class VirtualTryOnAPI:
         person_generation: str = "allow_all",
         safety_setting: str = "block_only_high",
         seed: Optional[int] = None,
-        storage_uri: Optional[str] = None,
         output_mime_type: str = "image/png",
         compression_quality: Optional[int] = None
     ) -> List[str]:
@@ -115,19 +117,11 @@ class VirtualTryOnAPI:
         if compression_quality and output_mime_type == "image/jpeg":
             request_body["parameters"]["outputOptions"]["compressionQuality"] = compression_quality
         
-        # 認証トークンの更新
-        if not self.credentials.valid:
-            if hasattr(self.credentials, 'refresh'):
-                self.credentials.refresh(Request())
-
         # APIリクエスト
         print(f"Virtual Try-On実行中... (画像数: {sample_count}, ステップ数: {base_steps})")
-        response = requests.post(
+        authed = AuthorizedSession(self.credentials)
+        response = authed.post(
             self.endpoint,
-            headers={
-                "Authorization": f"Bearer {self.credentials.token}",
-                "Content-Type": "application/json"
-            },
             json=request_body
         )
         
@@ -136,7 +130,7 @@ class VirtualTryOnAPI:
         
         # 画像の保存
         result = response.json()
-        Path(output_dir).mkdir(parents=True, exist_ok=True)
+        os.makedirs(output_dir, exist_ok=True)
         saved_paths = []
         
         for i, prediction in enumerate(result.get("predictions", [])):
@@ -164,14 +158,14 @@ if __name__ == "__main__":
     
     results = api.try_on(
         person_image_path="./images/person.png",
-        product_image_path="./images/dress2.png",
+        product_image_path="./images/dress.png",
         output_dir="./results",
         # APIパラメータ
-        sample_count=1,              # 4枚生成
-        base_steps=32,               # 高品質（ステップ数増加）
-        add_watermark=False,         # 透かしなし
-        seed=42,                     # 再現可能な結果
-        output_mime_type="image/png", # PNG形式
+        sample_count=1,              
+        base_steps=32,               
+        add_watermark=False,         
+        seed=42,                    
+        output_mime_type="image/png", 
     )
 
     print("生成完了しました")
